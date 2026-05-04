@@ -1,0 +1,8 @@
+services:
+  sqlite:
+    image: coleifer/sqlite-web:latest
+    command: sqlite_web -H 0.0.0.0 -p 8080 /data/dev.sqlite
+    ports:
+      - '8081:8080'
+    volumes:
+      - ./data:/data
