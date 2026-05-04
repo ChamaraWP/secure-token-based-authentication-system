@@ -4,7 +4,7 @@ import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
 import { migrate } from 'drizzle-orm/libsql/migrator';
 import { DATABASE } from './database.constants';
-import * as schema from './schema';
+import * as schema from './scheme';
 
 const DEFAULT_DATABASE_URL = 'file:./data/dev.sqlite';
 
