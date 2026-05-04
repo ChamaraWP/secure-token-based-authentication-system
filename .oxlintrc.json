@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "oxc", "unicorn", "node", "jest"],
+  "env": {
+    "node": true,
+    "jest": true,
+    "commonjs": true,
+    "es2023": true
+  },
+  "ignorePatterns": ["eslint.config.mjs"],
+  "options": {
+    "typeAware": true
+  },
+  "rules": {
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/no-floating-promises": "warn",
+    "@typescript-eslint/no-unsafe-argument": "warn"
+  }
+}
