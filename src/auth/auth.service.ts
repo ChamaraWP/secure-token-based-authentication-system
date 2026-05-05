@@ -2,24 +2,28 @@ import {
   ConflictException,
   Injectable,
   UnauthorizedException,
-} from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { UsersService } from '../users/users.service';
-import { verifyPassword } from '../common/utils/password';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
+} from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { UsersService } from "../users/users.service";
+import { verifyPassword } from "../common/utils/password";
+import { RegisterDto } from "./dto/register.dto";
+import { LoginDto } from "./dto/login.dto";
 import {
   JWT_ACCESS_EXPIRES_IN,
   JWT_ACCESS_SECRET,
   JWT_AUDIENCE,
   JWT_ISSUER,
-} from './auth.constants';
-import type { JwtPayload } from './types/jwt-payload.type';
+  REFRESH_TOKEN_EXPIRES_IN_DAYS,
+} from "./auth.constants";
+import type { JwtPayload } from "./types/jwt-payload.type";
+import { AuthTokenService } from "../auth-token/auth-token.service";
+import { generateOpaqueToken } from "../common/utils/token";
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
+    private readonly authTokenService: AuthTokenService,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -28,7 +32,7 @@ export class AuthService {
       input.email.toLocaleLowerCase().trim(),
     );
     if (existingUser) {
-      throw new ConflictException('User already exists');
+      throw new ConflictException("User already exists");
     }
 
     const user = await this.usersService.createUser({
@@ -49,15 +53,24 @@ export class AuthService {
       password: input.password,
     });
 
+    const refreshToken = generateOpaqueToken();
+
     const accessToken = await this.generateAccessToken(user);
 
+    await this.authTokenService.createRefreshToken({
+      userId: user.id,
+      rawToken: refreshToken,
+      expiresAt: this.getRefreshTokenExpiryDate(),
+    });
+
     return {
-      message: 'Login successful',
+      message: "Login successful",
       user: {
         id: user.id,
         email: user.email,
       },
       accessToken: accessToken,
+      refreshToken: refreshToken,
     };
   }
 
@@ -67,7 +80,7 @@ export class AuthService {
     );
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException("Invalid credentials");
     }
 
     const isPasswordValid = await verifyPassword(
@@ -75,7 +88,7 @@ export class AuthService {
       user.passwordHash,
     );
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException("Invalid credentials");
     }
 
     return user;
@@ -97,5 +110,13 @@ export class AuthService {
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
     });
+  }
+
+  private getRefreshTokenExpiryDate(): Date {
+    const expiresAt = new Date();
+
+    expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRES_IN_DAYS);
+
+    return expiresAt;
   }
 }
