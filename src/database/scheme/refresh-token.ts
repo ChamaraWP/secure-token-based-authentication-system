@@ -1,41 +1,41 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { users } from './user';
+import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { users } from "./user";
 
 export const refreshTokens = sqliteTable(
-  'refresh_tokens',
+  "refresh_tokens",
 
   {
-    id: text('id').primaryKey(),
+    id: text("id").primaryKey(),
 
-    userId: text('user_id')
+    userId: text("user_id")
       .notNull()
 
-      .references(() => users.id, { onDelete: 'cascade' }),
+      .references(() => users.id, { onDelete: "cascade" }),
 
-    tokenHash: text('token_hash').notNull(),
+    tokenHash: text("token_hash").notNull(),
 
-    familyId: text('family_id').notNull(),
+    familyId: text("family_id").notNull(),
 
-    replacedByTokenId: text('replaced_by_token_id'),
+    replacedByTokenId: text("replaced_by_token_id"),
 
-    revoked: integer('revoked', { mode: 'boolean' }).notNull().default(false),
+    revoked: integer("revoked", { mode: "boolean" }).notNull().default(false),
 
-    revokedAt: integer('revoked_at', { mode: 'timestamp' }),
+    revokedAt: integer("revoked_at", { mode: "timestamp" }),
 
-    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
 
-    userAgent: text('user_agent'),
+    userAgent: text("user_agent"),
 
-    ipAddress: text('ip_address'),
+    ipAddress: text("ip_address"),
 
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
 
   (table) => ({
-    userIdIdx: index('refresh_tokens_user_id_idx').on(table.userId),
+    userIdIdx: index("refresh_tokens_user_id_idx").on(table.userId),
 
-    familyIdIdx: index('refresh_tokens_family_id_idx').on(table.familyId),
+    familyIdIdx: index("refresh_tokens_family_id_idx").on(table.familyId),
 
-    tokenHashIdx: index('refresh_tokens_token_hash_idx').on(table.tokenHash),
+    tokenHashIdx: index("refresh_tokens_token_hash_idx").on(table.tokenHash),
   }),
 );

@@ -18,6 +18,7 @@ import {
 import type { JwtPayload } from "./types/jwt-payload.type";
 import { AuthTokenService } from "../auth-token/auth-token.service";
 import { generateOpaqueToken } from "../common/utils/token";
+import { RefreshDto } from "./dto/refresh.dto";
 
 @Injectable()
 export class AuthService {
@@ -94,6 +95,57 @@ export class AuthService {
     return user;
   }
 
+  async refresh(input: RefreshDto) {
+    const existingRefreshToken =
+      await this.authTokenService.findRefreshTokenByRawToken(
+        input.refreshToken,
+      );
+
+    if (!existingRefreshToken) {
+      throw new UnauthorizedException("Invalid refresh token");
+    }
+
+    if (existingRefreshToken.revoked) {
+      await this.authTokenService.revokeRefreshTokensByFamily(
+        existingRefreshToken.familyId,
+      );
+
+      throw new UnauthorizedException("Refresh token reuse detected");
+    }
+
+    if (existingRefreshToken.expiresAt < new Date()) {
+      await this.authTokenService.revokeRefreshToken(existingRefreshToken.id);
+      throw new UnauthorizedException("Refresh token has expired");
+    }
+
+    const user = await this.usersService.findById(existingRefreshToken.userId);
+
+    if (!user) {
+      throw new UnauthorizedException("Invalid refresh token");
+    }
+
+    const accessToken = await this.generateAccessToken(user);
+    const newRefreshToken = generateOpaqueToken();
+
+    const newRefreshTokenRecord =
+      await this.authTokenService.createRefreshToken({
+        userId: user.id,
+        rawToken: newRefreshToken,
+        familyId: existingRefreshToken.familyId,
+        expiresAt: this.getRefreshTokenExpiryDate(),
+      });
+
+    await this.authTokenService.revokeRefreshToken(
+      existingRefreshToken.id,
+      newRefreshTokenRecord.id,
+    );
+
+    return {
+      accessToken,
+      refreshToken: newRefreshToken,
+    };
+  }
+
   private async generateAccessToken(user: {
     id: string;
     email: string;
@@ -114,9 +166,7 @@ export class AuthService {
 
   private getRefreshTokenExpiryDate(): Date {
     const expiresAt = new Date();
-
     expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRES_IN_DAYS);
-
     return expiresAt;
   }
 }
