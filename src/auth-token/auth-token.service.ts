@@ -6,7 +6,7 @@ import {
 } from "../common/utils/refresh-token";
 import { generateId } from "../common/utils/id";
 import { InjectDatabase } from "../database/database.decorator";
-import { eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import type { DatabaseClient } from "../database/database.types";
 
 @Injectable()
@@ -80,6 +80,26 @@ export class AuthTokenService {
     return undefined;
   }
 
+  async findActiveSessionsForUser(userId: string) {
+    return await this.db
+      .select({
+        id: refreshTokens.id,
+        familyId: refreshTokens.familyId,
+        userAgent: refreshTokens.userAgent,
+        ipAddress: refreshTokens.ipAddress,
+        expiresAt: refreshTokens.expiresAt,
+        createdAt: refreshTokens.createdAt,
+      })
+      .from(refreshTokens)
+      .where(
+        and(
+          eq(refreshTokens.userId, userId),
+          eq(refreshTokens.revoked, false),
+          gt(refreshTokens.expiresAt, new Date()),
+        ),
+      );
+  }
+
   async revokeRefreshTokensByFamily(familyId: string) {
     await this.db
       .update(refreshTokens)
@@ -88,5 +108,15 @@ export class AuthTokenService {
         revokedAt: new Date(),
       })
       .where(eq(refreshTokens.familyId, familyId));
+  }
+
+  async revokeAllRefreshTokensForUser(userId: string) {
+    await this.db
+      .update(refreshTokens)
+      .set({
+        revoked: true,
+        revokedAt: new Date(),
+      })
+      .where(eq(refreshTokens.userId, userId));
   }
 }

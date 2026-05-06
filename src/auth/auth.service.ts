@@ -19,6 +19,7 @@ import type { JwtPayload } from "./types/jwt-payload.type";
 import { AuthTokenService } from "../auth-token/auth-token.service";
 import { generateOpaqueToken } from "../common/utils/token";
 import { RefreshDto } from "./dto/refresh.dto";
+import { LogoutDto } from "./dto/logout.dto";
 
 @Injectable()
 export class AuthService {
@@ -48,20 +49,31 @@ export class AuthService {
     };
   }
 
-  async login(input: LoginDto) {
+  async login(
+    input: LoginDto,
+    metadata?: {
+      userAgent?: string | string[];
+
+      ipAddress?: string;
+    },
+  ) {
     const user = await this.validateUserCredentials({
       username: input.email,
       password: input.password,
     });
 
-    const refreshToken = generateOpaqueToken();
-
     const accessToken = await this.generateAccessToken(user);
+    const refreshToken = generateOpaqueToken();
 
     await this.authTokenService.createRefreshToken({
       userId: user.id,
       rawToken: refreshToken,
       expiresAt: this.getRefreshTokenExpiryDate(),
+      userAgent: Array.isArray(metadata?.userAgent)
+        ? metadata.userAgent.join(", ")
+        : metadata?.userAgent,
+
+      ipAddress: metadata?.ipAddress,
     });
 
     return {
@@ -133,6 +145,8 @@ export class AuthService {
         rawToken: newRefreshToken,
         familyId: existingRefreshToken.familyId,
         expiresAt: this.getRefreshTokenExpiryDate(),
+        userAgent: existingRefreshToken.userAgent ?? undefined,
+        ipAddress: existingRefreshToken.ipAddress ?? undefined,
       });
 
     await this.authTokenService.revokeRefreshToken(
@@ -144,6 +158,53 @@ export class AuthService {
       accessToken,
       refreshToken: newRefreshToken,
     };
+  }
+
+  async revokeSession(userId: string, familyId: string) {
+    const sessions =
+      await this.authTokenService.findActiveSessionsForUser(userId);
+    const ownsSession = sessions.some(
+      (session) => session.familyId === familyId,
+    );
+    if (!ownsSession) {
+      return { message: "Session revoked" };
+    }
+    await this.authTokenService.revokeRefreshTokensByFamily(familyId);
+    return { message: "Session revoked" };
+  }
+
+  async logout(input: LogoutDto) {
+    const existingRefreshToken =
+      await this.authTokenService.findRefreshTokenByRawToken(
+        input.refreshToken,
+      );
+
+    if (!existingRefreshToken) {
+      return { message: "Logged out " };
+    }
+
+    await this.authTokenService.revokeRefreshToken(existingRefreshToken.id);
+    return { message: "Logged out" };
+  }
+
+  async logoutAll(userId: string) {
+    await this.authTokenService.revokeAllRefreshTokensForUser(userId);
+    await this.usersService.incrementTokenVersion(userId);
+
+    return { message: "Logged out from all devices" };
+  }
+
+  async getActiveSessions(userId: string) {
+    const sessions =
+      await this.authTokenService.findActiveSessionsForUser(userId);
+
+    return sessions.map((session) => ({
+      familyId: session.familyId,
+      userAgent: session.userAgent,
+      ipAddress: session.ipAddress,
+      createdAt: session.createdAt,
+      expiresAt: session.expiresAt,
+    }));
   }
 
   private async generateAccessToken(user: {
