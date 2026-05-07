@@ -22,6 +22,8 @@ export const refreshTokens = sqliteTable(
 
     revokedAt: integer("revoked_at", { mode: "timestamp" }),
 
+    revokedReason: text("revoked_reason"),
+
     expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
 
     userAgent: text("user_agent"),

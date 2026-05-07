@@ -5,9 +5,16 @@ import { UsersModule } from "../users/users.module";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { JwtModule } from "@nestjs/jwt";
 import { AuthTokenModule } from "../auth-token/auth-token.module";
+import { AccessTokenDenyListServiceModule } from "../access-token-deny-list-service/access-token-deny-list-service.module";
 
 @Module({
-  imports: [UsersModule, AuthTokenModule, JwtModule.register({})],
+  imports: [
+    UsersModule,
+    AuthTokenModule,
+    AccessTokenDenyListServiceModule,
+    JwtModule.register({}),
+  ],
+
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
 })

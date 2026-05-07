@@ -17,15 +17,20 @@ import {
 } from "./auth.constants";
 import type { JwtPayload } from "./types/jwt-payload.type";
 import { AuthTokenService } from "../auth-token/auth-token.service";
+import { AccessTokenDenylistService } from "../access-token-deny-list-service/access-token-deny-list.service";
 import { generateOpaqueToken } from "../common/utils/token";
 import { RefreshDto } from "./dto/refresh.dto";
 import { LogoutDto } from "./dto/logout.dto";
+import { revokedReasons } from "./types/revoked-reason";
+import { generateId } from "../common/utils/id";
+import { AuthenticatedUser } from "./types/authenticated-user.type";
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly authTokenService: AuthTokenService,
+    private readonly denylistService: AccessTokenDenylistService,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -118,15 +123,22 @@ export class AuthService {
     }
 
     if (existingRefreshToken.revoked) {
-      await this.authTokenService.revokeRefreshTokensByFamily(
-        existingRefreshToken.familyId,
-      );
+      if (existingRefreshToken.revokedReason === revokedReasons.rotation) {
+        await this.authTokenService.revokeRefreshTokensByFamily(
+          existingRefreshToken.familyId,
+          revokedReasons.reuse_detected,
+        );
+        throw new UnauthorizedException("Refresh token reuse detected");
+      }
 
-      throw new UnauthorizedException("Refresh token reuse detected");
+      throw new UnauthorizedException("Invalid refresh token");
     }
 
     if (existingRefreshToken.expiresAt < new Date()) {
-      await this.authTokenService.revokeRefreshToken(existingRefreshToken.id);
+      await this.authTokenService.revokeRefreshToken(
+        existingRefreshToken.id,
+        revokedReasons.expired,
+      );
       throw new UnauthorizedException("Refresh token has expired");
     }
 
@@ -151,6 +163,7 @@ export class AuthService {
 
     await this.authTokenService.revokeRefreshToken(
       existingRefreshToken.id,
+      revokedReasons.rotation,
       newRefreshTokenRecord.id,
     );
 
@@ -169,11 +182,14 @@ export class AuthService {
     if (!ownsSession) {
       return { message: "Session revoked" };
     }
-    await this.authTokenService.revokeRefreshTokensByFamily(familyId);
+    await this.authTokenService.revokeRefreshTokensByFamily(
+      familyId,
+      revokedReasons.session_revoked,
+    );
     return { message: "Session revoked" };
   }
 
-  async logout(input: LogoutDto) {
+  async logout(input: LogoutDto, currentUser: AuthenticatedUser) {
     const existingRefreshToken =
       await this.authTokenService.findRefreshTokenByRawToken(
         input.refreshToken,
@@ -183,12 +199,21 @@ export class AuthService {
       return { message: "Logged out " };
     }
 
-    await this.authTokenService.revokeRefreshToken(existingRefreshToken.id);
+    if (existingRefreshToken) {
+      await this.authTokenService.revokeRefreshToken(
+        existingRefreshToken.id,
+        revokedReasons.logout,
+      );
+    }
+    await this.denylistCurrentAccessToken(currentUser.jti);
     return { message: "Logged out" };
   }
 
   async logoutAll(userId: string) {
-    await this.authTokenService.revokeAllRefreshTokensForUser(userId);
+    await this.authTokenService.revokeAllRefreshTokensForUser(
+      userId,
+      revokedReasons.logout_all,
+    );
     await this.usersService.incrementTokenVersion(userId);
 
     return { message: "Logged out from all devices" };
@@ -216,6 +241,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       tv: user.tokenVersion,
+      jti: generateId(),
     };
     return this.jwtService.signAsync(payload, {
       secret: JWT_ACCESS_SECRET,
@@ -229,5 +255,10 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRES_IN_DAYS);
     return expiresAt;
+  }
+
+  private async denylistCurrentAccessToken(jti: string) {
+    //Better version later: TTL = token exp - current time
+    await this.denylistService.denylist(jti, 15 * 60);
   }
 }

@@ -56,12 +56,17 @@ export class AuthTokenService {
     return undefined;
   }
 
-  async revokeRefreshToken(tokenId: string, revokedByTokenId?: string) {
+  async revokeRefreshToken(
+    tokenId: string,
+    reason: string,
+    revokedByTokenId?: string,
+  ) {
     await this.db
       .update(refreshTokens)
       .set({
         revoked: true,
         revokedAt: new Date(),
+        revokedReason: reason,
         replacedByTokenId: revokedByTokenId ?? null,
       })
       .where(eq(refreshTokens.id, tokenId));
@@ -100,21 +105,23 @@ export class AuthTokenService {
       );
   }
 
-  async revokeRefreshTokensByFamily(familyId: string) {
+  async revokeRefreshTokensByFamily(familyId: string, reason: string) {
     await this.db
       .update(refreshTokens)
       .set({
         revoked: true,
+        revokedReason: reason,
         revokedAt: new Date(),
       })
       .where(eq(refreshTokens.familyId, familyId));
   }
 
-  async revokeAllRefreshTokensForUser(userId: string) {
+  async revokeAllRefreshTokensForUser(userId: string, reason: string) {
     await this.db
       .update(refreshTokens)
       .set({
         revoked: true,
+        revokedReason: reason,
         revokedAt: new Date(),
       })
       .where(eq(refreshTokens.userId, userId));

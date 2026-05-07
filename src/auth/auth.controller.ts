@@ -47,8 +47,9 @@ export class AuthController {
   }
 
   @Post("logout")
-  logout(@Body() body: LogoutDto) {
-    return this.authService.logout(body);
+  @UseGuards(JwtAuthGuard)
+  logout(@Body() body: LogoutDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.authService.logout(body, user);
   }
 
   @Post("logout-all")
