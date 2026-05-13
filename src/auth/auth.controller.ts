@@ -7,8 +7,9 @@ import {
   Req,
   Delete,
   Param,
+  Res,
 } from "@nestjs/common";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { AuthService } from "./auth.service";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { RegisterDto } from "./dto/register.dto";
@@ -34,22 +35,59 @@ export class AuthController {
   }
 
   @Post("login")
-  login(@Body() input: LoginDto, @Req() req: Request) {
-    return this.authService.login(input, {
+  async login(
+    @Body() input: LoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const results = await this.authService.login(input, {
       userAgent: req.headers["user-agent"],
       ipAddress: req.ip,
+    });
+
+    res.cookie("refreshToken", results.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/auth/refresh",
+      maxAge: 1000 * 60 * 60 * 24 * 30,
     });
   }
 
   @Post("refresh")
-  refresh(@Body() body: RefreshDto) {
-    return this.authService.refresh(body);
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const refreshToken = req.cookies.refreshToken as string;
+
+    const results = await this.authService.refresh({ refreshToken });
+
+    res.cookie("refreshToken", results.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/auth/refresh",
+      maxAge: 1000 * 60 * 60 * 24 * 30,
+    });
+
+    return {
+      accessToken: results.accessToken,
+    };
   }
 
   @Post("logout")
   @UseGuards(JwtAuthGuard)
-  logout(@Body() body: LogoutDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.authService.logout(body, user);
+  logout(
+    @Body() body: LogoutDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const results = this.authService.logout(body, user);
+    res.clearCookie("refreshToken", {
+      path: "/auth/refresh",
+    });
+    return results;
   }
 
   @Post("logout-all")
